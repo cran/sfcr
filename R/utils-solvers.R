@@ -54,8 +54,48 @@
   return(x)
 }
 
-#' Make the underlying matrix that will be modified in place with the Gauss Seidel
-#' algorithm
+
+# Note about `sfcr_random()`:
+# This function takes advantage of the scoping in R to be accepted only when it is called
+# from inside `sfcr_set()`. If it is called anywhere else, it returns a message indicating
+# its correct utilization.
+# To achieve this functionality, the function written here is exported to the namespace of
+# the sfcr package, while different definitions of `sfcr_random()` are created locally at
+# every function that parses and evaluates the expressions created with `sfcr_set()`.
+# The local definitions of `sfcr_random()` are present in the following (unexported) functions:
+# - `.make_matrix()` in utils.solvers.R
+# - `.sfcr_make_scenario_matrix()` in sfcr_scenario.R to extend baseline
+# - `.sfcr_make_scenario_matrix()` in sfcr_scenario.R to extend shocks
+# - `.extend_baseline_matrix()` in sfcr_scenario.R
+
+
+#' Generate random sequences inside \code{sfcr_set()}
+#'
+#' This function can only be used inside \code{sfcr_set()} when generating variables.
+#' It smartly guesses the length of the \code{sfcr_baseline()} model or of the
+#' \code{sfcr_shock()} that it is inserted.
+#'
+#' @param .f This argument accepts three options: "rnorm", "rbinom", and "runif",
+#' and implement the respective functions from the built-in \code{stats} package.
+#' @param ... Extra arguments to be passed to the \code{stats} generator functions
+#'
+#' @examples
+#' # Create a random normal series to pass along an endogenous series
+#' # Example taken from model PC EXT 2.
+#' sfcr_set(
+#'     Ra ~ sfcr_random("rnorm", mean=0, sd=0.05)
+#' )
+#'
+#' @author João Macalós
+#'
+#' @export
+#'
+sfcr_random <- function(.f, ...) {
+  print("This function only returns an output when supplied inside `sfcr_set()`")
+}
+
+
+#' Make the underlying matrix that will be modified in place by the solvers
 #'
 #' @param equations Prepared equations.
 #' @param external Exogenous and parameters as tibble.
@@ -87,6 +127,19 @@
 
   # Matrix with variables (operating on rows)
   m1 <- matrix(c(ends, exgs, lblocks), nrow = periods, ncol = mcols, dimnames = list(1:periods, mnames), byrow = T)
+
+  sfcr_random <- function(.f, ...) {
+    match.arg(.f, c("rnorm", "rbinom", "runif"))
+
+    args <- list(...)
+    # Make sure that periods are read as n
+    args$n <- NULL
+    n <- list(n=periods)
+    args <- c(n, args)
+    # Call the function
+    do.call(eval(parse(text=.f)), args)
+    }
+
 
   for (var in seq_along(exgs_names)) {
     m1[, exgs_names[[var]]] <- eval(exg_exprs[[var]])

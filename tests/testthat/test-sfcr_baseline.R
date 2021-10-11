@@ -78,10 +78,14 @@ test_that("Error if invalid name .i in external variables", {
   expect_error(sfcr_baseline(eqs, ext, periods = 2), "Invalid name detected! Please don't use \".i\" to name any variable.")
 })
 
+test_that("Error if length of exogenous variables is not equal to one or to the length of the model.", {
+ ext <- sfcr_set(G_d ~ 20, W ~ seq(1, 10), alpha1 ~ 0.6, alpha2 ~ 0.4, theta ~ 0.2)
+ expect_error(sfcr_baseline(eqs, ext, periods = 15), "The exogenous variables must have either length 1 or exactly the same length as the baseline model.")
+})
 
-test_that("Error if length of exogenous variables is more than one", {
-  ext <- sfcr_set(G_d ~ 20, W ~ seq(1, 10), alpha1 ~ 0.6, alpha2 ~ 0.4, theta ~ 0.2)
-  expect_error(sfcr_baseline(eqs, ext, periods = 5), "At the baseline construct level, exogenous variables can only be supplied as a constant.")
+test_that("Only warning if exogenous variable has the same length as periods", {
+  ext <- sfcr_set(G_d ~ 20, W ~ rnorm(15, mean=1, sd=.1), alpha1 ~ 0.6, alpha2 ~ 0.4, theta ~ 0.2)
+  expect_warning(sfcr_baseline(eqs, ext, periods = 15), 'The utilization exogenous series within a baseline model is not recommended and will be disallowed in the future. Be careful when using this functionality.')
 })
 
 test_that("Periods cannot be smaller than 2", {
@@ -97,4 +101,10 @@ test_that("Periods cannot be smaller than 2", {
 test_that("Periods cannot be smaller than 2", {
   ext <- sfcr_set(G_d ~ 20, W ~ 1, alpha1 ~ 0.6, alpha2 ~ 0.4, theta ~ 0.2)
   expect_error(sfcr_baseline(eqs, ext, periods = 0), "The minimum periods required to simulate a model is 2.")
+})
+
+test_that("No error if periods are defined outside function call", {
+  periods <- 50
+  ext <- sfcr_set(G_d ~ 20, W ~ sfcr_random("rnorm", mean=1, sd=.1), alpha1 ~ 0.6, alpha2 ~ 0.4, theta ~ 0.2)
+  expect_length(sfcr_baseline(eqs, ext, periods = 15)$W, 15)
 })

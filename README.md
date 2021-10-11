@@ -144,11 +144,11 @@ examples on the usage of the package.
 
 **Q: Can you add exogenous series to a `sfcr` model?**
 
-A: Since version 0.2, the `sfcr` package only allow the utilization of
-exogenous variables in the `sfcr_scenario()` function. This
-functionality was excluded from the `sfcr_baseline()` function because
-it led to unexpected behavior when calculating scenarios on the top of
-those baseline models.
+A: Since version 0.2, the `sfcr` package recommends the utilization of
+exogenous variables only in the `sfcr_scenario()` function. This
+functionality is going to be excluded from `sfcr_baseline()` function in
+the future because it led to unexpected behavior when calculating
+scenarios on the top of those baseline models.
 
 The exogenous series can be added to the model with the help of
 `sfcr_shock()` and `sfcr_set()` functions. It is further required that
@@ -156,14 +156,16 @@ the length of the exogenous time series being supplied be either 1 or
 exactly equal to length of the shock.
 
 For example, the code supplied above can be modified to make `Gd`
-increase from 30 to 40 between periods 5 and 60 of the scenario:
+increase from 30 to 40 between periods 1 and 60 of the scenario:
 
 ``` r
+library(dplyr) # for select() and everything() functions
+
 shock <- sfcr_shock(
   variables = sfcr_set(
-    Gd ~ seq(30, 40, length.out=56)
+    Gd ~ seq(30, 40, length.out=60)
   ),
-  start = 5,
+  start = 1,
   end = 60
 )
 
@@ -172,23 +174,91 @@ sim2 <- sfcr_scenario(
   scenario = shock,
   periods = 60
   )
+#> Warning: Passing exogenous series with a shock can lead to unexpected behavior if the length of the series is smaller than the periods to the end of the scenario. Be cautious when using this functionality.
+#> This warning is displayed once per session.
 
-sim2
+select(sim2, period, Gd, everything())
 #> # A tibble: 60 x 17
-#>    period   TXs    YD    Cd    Hh    Ns    Nd    Cs    Gs     Y   TXd    Hs
-#>  *  <int> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>
-#>  1      1  20.0  80.0  80.0  80.0  100.  100.  80.0  20    100.  20.0  80.0
-#>  2      2  20.0  80.0  80.0  80.0  100.  100.  80.0  20    100.  20.0  80.0
-#>  3      3  20.0  80.0  80.0  80.0  100.  100.  80.0  20    100.  20.0  80.0
-#>  4      4  20.0  80.0  80.0  80.0  100.  100.  80.0  20    100.  20.0  80.0
-#>  5      5  23.8  95.4  89.2  86.2  119.  119.  89.2  30    119.  23.8  86.2
-#>  6      6  24.9  99.4  94.1  91.5  124.  124.  94.1  30.2  124.  24.9  91.5
-#>  7      7  25.8 103.   98.4  96.1  129.  129.  98.4  30.4  129.  25.8  96.1
-#>  8      8  26.5 106.  102.  100.   133.  133. 102.   30.5  133.  26.5 100. 
-#>  9      9  27.2 109.  105.  104.   136.  136. 105.   30.7  136.  27.2 104. 
-#> 10     10  27.8 111.  108.  107.   139.  139. 108.   30.9  139.  27.8 107. 
-#> # ... with 50 more rows, and 5 more variables: Gd <dbl>, W <dbl>, alpha1 <dbl>,
+#>    period    Gd   TXs    YD    Cd    Hh    Ns    Nd    Cs    Gs     Y   TXd
+#>     <int> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>
+#>  1      1  30    20.0  80.0  80.0  80.0  100.  100.  80.0  20    100.  20.0
+#>  2      2  30.2  23.9  95.6  89.4  86.3  120.  120.  89.4  30.2  120.  23.9
+#>  3      3  30.3  24.9  99.8  94.4  91.7  125.  125.  94.4  30.3  125.  24.9
+#>  4      4  30.5  25.8 103.   98.7  96.3  129.  129.  98.7  30.5  129.  25.8
+#>  5      5  30.7  26.6 106.  102.  100.   133.  133. 102.   30.7  133.  26.6
+#>  6      6  30.8  27.3 109.  106.  104.   137.  137. 106.   30.8  137.  27.3
+#>  7      7  31.0  27.9 112.  109.  107.   140.  140. 109.   31.0  140.  27.9
+#>  8      8  31.2  28.5 114.  111.  110.   142.  142. 111.   31.2  142.  28.5
+#>  9      9  31.4  28.9 116.  113.  112.   145.  145. 113.   31.4  145.  28.9
+#> 10     10  31.5  29.4 118.  115.  114.   147.  147. 115.   31.5  147.  29.4
+#> # ... with 50 more rows, and 5 more variables: Hs <dbl>, W <dbl>, alpha1 <dbl>,
 #> #   alpha2 <dbl>, theta <dbl>
+```
+
+**Q: How to add random variation to endogenous variables?**
+
+A: The recommended way to add random variation to endogenous variables
+is with the `sfcr_random()` function. This function can only be used
+inside `sfcr_set()`, be it when you’re creating a set of exogenous
+variables or when defining the variables inside a `sfcr_shock()`. The
+advantage of utilizing this function is that it smartly guesses the
+length of the models, avoiding any unwanted mistake.
+
+The `sfcr_random()` function can accept three arguments as its first
+`.f` argument: `"rnorm"`, `"rbinom"`, and `"runif"`. These arguments
+implement wrappers around the built-in functions `rnorm()`, `rbinom()`,
+and `runif()` – random series generator function – but guessing the
+correct length of the `sfcr_baseline()`, `sfcr_scenario()`, or
+`sfcr_shock()` from where they are called. The `sfcr_random()` function
+also accepts any extra argument that can be passed to these functions.
+
+Snippet:
+
+``` r
+sfcr_set(
+  Ra ~ sfcr_random("rnorm", sd=0.05)
+)
+#> [[1]]
+#> Ra ~ sfcr_random("rnorm", sd = 0.05)
+#> 
+#> attr(,"class")
+#> [1] "sfcr_set" "list"
+```
+
+An utilization of this functionality in practice is provided in the
+article replicating the Portfolio Choice model from Godley and Lavoie
+(2007ch. 4).
+
+Alternatively, the direct utilization of the random generator functions
+from `stats` are still allowed to ensure the compatibility with the
+v0.1.1 of the package. Nonetheless, the user must be careful when using
+this functionality at the `sfcr_baseline()` level since this expression
+is going to be evaluated again at the `sfcr_scenario()` level. The
+safest way to use these functions is by passing `periods` instead of an
+integer as their first argument.
+
+Snippet:
+
+``` r
+# Not recommended but work:
+sfcr_set(
+  Ra ~ rnorm(periods, sd=0.05)
+)
+#> [[1]]
+#> Ra ~ rnorm(periods, sd = 0.05)
+#> 
+#> attr(,"class")
+#> [1] "sfcr_set" "list"
+
+# NOT RECOMMENDED!
+sfcr_set(
+  Ra ~ rnorm(60, sd=0.05)
+)
+#> [[1]]
+#> Ra ~ rnorm(60, sd = 0.05)
+#> 
+#> attr(,"class")
+#> [1] "sfcr_set" "list"
 ```
 
 **Q: Can you add endogenous variables with more than one lag?**

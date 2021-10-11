@@ -14,9 +14,30 @@
 #'
 .sfcr_make_scenario_matrix <- function(baseline, scenario, periods) {
 
+  sfcr_random <- function(.f, ...) {
+    match.arg(.f, c("rnorm", "rbinom", "runif"))
+
+    args <- list(...)
+    # Make sure that periods are read as n
+    args$n <- NULL
+    n <- list(n=periods)
+    args <- c(n, args)
+    # Call the function
+    do.call(eval(parse(text=.f)), args)
+  }
+
   steady <- utils::tail(attributes(baseline)$matrix, n = 1)
 
   m <- steady[rep(seq_len(nrow(steady)), periods), ]
+
+  # TODO: evaluate external vars here (and so add sfcr_random())
+  external <- attr(baseline, "external")
+  exgs_names <- external$lhs
+  exg_exprs <- purrr::map(external$rhs, function(x) parse(text=x))
+
+  for (var in seq_along(exgs_names)) {
+    m[, exgs_names[[var]]] <- eval(exg_exprs[[var]])
+  }
 
   scenario_eqs <- purrr::map(scenario, function(x) .eq_as_tb(x[[1]]))
 
@@ -26,8 +47,22 @@
   scenario_start <- purrr::map(scenario, function(x) x[[2]])
   scenario_end <- purrr::map(scenario, function(x) x[[3]])
 
+  # Re-define here to extend shock
+  sfcr_random <- function(.f, ...) {
+   match.arg(.f, c("rnorm", "rbinom", "runif"))
+
+   args <- list(...)
+  # Make sure that periods are read as n
+   args$n <- NULL
+   n <- list(n=shock_length)
+   args <- c(n, args)
+  # Call the function
+   do.call(eval(parse(text=.f)), args)
+  }
+
 
   for (scenario in seq_len(vctrs::vec_size(scenario_eqs))) {
+    shock_length <- length(seq(scenario_start[[scenario]], scenario_end[[scenario]]))
     scenario_nms <- scenario_names[[scenario]]
     scenario_xprs <- scenario_exprs[[scenario]]
 
@@ -54,8 +89,34 @@
 #' @keywords internal
 #'
 .extend_baseline_matrix <- function(baseline, periods) {
+
   steady <- utils::tail(attributes(baseline)$matrix, n = 1)
+
   m <- steady[rep(seq_len(nrow(steady)), periods), ]
+
+  # TODO : evaluate external vars here
+  sfcr_random <- function(.f, ...) {
+   match.arg(.f, c("rnorm", "rbinom", "runif"))
+
+   args <- list(...)
+  # Make sure that periods are read as n
+   args$n <- NULL
+   n <- list(n=periods)
+   args <- c(n, args)
+  # Call the function
+   do.call(eval(parse(text=.f)), args)
+  }
+
+  external <- attr(baseline, "external")
+  exgs_names <- external$lhs
+  exg_exprs <- purrr::map(external$rhs, function(x) parse(text=x))
+
+  for (var in seq_along(exgs_names)) {
+    m[, exgs_names[[var]]] <- eval(exg_exprs[[var]])
+  }
+
+  return(m)
+
 }
 
 .abort_wrong_shock_var <- function(wrong_var) {
@@ -94,10 +155,8 @@
 #'
 .check_shock_consistency <- function(shock, periods=periods) {
 
-  # Parse vars
-  vars <- .eq_as_tb(shock$variables)
-  parse_vars <- purrr::map(vars$rhs, ~eval(parse(text=.x)))
-  vars_length <- purrr::map_dbl(parse_vars, length)
+  # We remove `sfcr_random` from sanity checks because it is certain that it will not lead
+  # to mistakes.
 
   # Duration of the shock
   start = shock$start
@@ -113,11 +172,28 @@
 
   length_shock = length(seq(start, end))
 
-  if (mean(vars_length) > 1) {
-    abortifnot(all(vars_length %in% c(1, length_shock)), "All exogenous variables supplied as a shock must have either length 1 or exactly the same length as the shock.")
+  # Parse vars
+  vars <- .eq_as_tb(shock$variables)
+  vars <- dplyr::filter(vars, stringr::str_detect(.data$rhs, "sfcr_random", negate=TRUE))
 
-    # Warning
-    rlang::warn("Passing exogenous series with a shock can lead to unexpected behavior if the length of the series is smaller than the periods to the end of the scenario. Be cautious when using this functionality.", .frequency_id = "scenario_warn", .frequency="once")
+  if (vctrs::vec_is_empty(vars)) {
+    # pass
+
+  } else {
+
+    parse_vars <- purrr::map(vars$rhs, ~eval(parse(text=.x)))
+    vars_length <- purrr::map_dbl(parse_vars, length)
+
+
+    if (mean(vars_length) > 1) {
+
+      abortifnot(all(vars_length %in% c(1, length_shock)), "All exogenous variables supplied as a shock must have either length 1 or exactly the same length as the shock.")
+
+      # Warning
+      rlang::warn("Passing exogenous series with a shock can lead to unexpected behavior if the length of the series is smaller than the periods to the end of the scenario. Be cautious when using this functionality.", .frequency_id = "scenario_warn", .frequency="once")
+
+
+    }
 
   }
 

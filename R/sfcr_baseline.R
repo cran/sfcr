@@ -45,7 +45,7 @@ new_sfcr_tbl <- function(tbl, matrix, calls, external) {
   stopifnot(inherits(tbl, "tbl_df"))
   stopifnot(inherits(matrix, "matrix"))
   stopifnot(inherits(calls, "tbl_df"), names(calls) == c("lhs", "rhs", "block", "id"))
-  stopifnot(inherits(external, "character"))
+  stopifnot(inherits(external, "tbl_df"))
 
   structure(tbl,
             class = c("sfcr_tbl", "tbl_df", "tbl", "data.frame"),
@@ -107,6 +107,51 @@ sfcr_get_blocks <- function(sfcr_tbl) {
   rlang::abort(message = message)
 }
 
+
+#' Check shocks for length consistency and warn about risks of using exogenous series
+#'
+#'
+#' This function makes two checks:
+#'
+#' 1) The exogenous variable is a constant that is repeated over time;
+#' 2) The exogenous variable has exactly the same length as the shock.
+#'
+#' Furthermore, it throws a warning that using exogenous series in a shock can lead to unexpected
+#' behavior if the length of the shock is not the same as the periods in the scenario.
+#'
+#' @param external An .eq_as_tb() tibble with external variables.
+#' @param periods The periods of the baseline model.
+#'
+#' @author João Macalós
+#'
+#' @keywords internal
+#'
+.check_external_consistency <- function(external, periods=periods) {
+
+  # We remove `sfcr_random` from sanity checks because it is certain that it will not lead
+  # to mistakes.
+
+  external <- dplyr::filter(external, stringr::str_detect(.data$rhs, "sfcr_random", negate=TRUE))
+
+  if (is.null(external$rhs)) {
+    return()
+  }
+
+  # Parse vars
+  parse_vars <- purrr::map(external$rhs, ~eval(parse(text=.x)))
+  vars_length <- purrr::map_dbl(parse_vars, length)
+
+  if (mean(vars_length) > 1) {
+    abortifnot(all(vars_length %in% c(1, periods)), "The exogenous variables must have either length 1 or exactly the same length as the baseline model.")
+
+    # Warning
+    rlang::warn("The utilization exogenous series within a baseline model is not recommended and will be disallowed in the future. Be careful when using this functionality.", .frequency_id = "scenario_warn", .frequency = "once")
+
+  }
+
+}
+
+
 #' Simulate the baseline scenario of a stock-flow consistent model
 #'
 #' The \code{sfcr_baseline()} function is used to simulate a SFC model.
@@ -115,7 +160,7 @@ sfcr_get_blocks <- function(sfcr_tbl) {
 #' must be written with the R formula syntax, with the left-hand side separated from the right-hand side
 #' by a twiddle \code{~}.
 #' @param periods A number specifying the total number of periods of the model to be simulated.
-#' @param external,initial List of external variables (exogenous and parameters) or of initial
+#' @param external,initial A \code{sfcr_set} of external variables (exogenous and parameters) or of initial
 #' values. They should be written as equations using the R syntax.
 #' @param hidden Named object that identify the two variables that make the hidden equality
 #' in the SFC model, e.g., \code{c("H_h" = "H_s")}. Defaults to NULL.
@@ -215,6 +260,9 @@ sfcr_baseline <- function(equations, external, periods, initial = NULL, hidden =
 
   external <- .eq_as_tb(external)
 
+  # Check for external length consistency:
+  .check_external_consistency(external, periods)
+
   s1 <- .sfcr_find_order(equations)
 
   # Checks:
@@ -260,8 +308,8 @@ sfcr_baseline <- function(equations, external, periods, initial = NULL, hidden =
   # 6. Check that exogenous variables passsed as a sequence/series and not as a constant
   # have the same length as the periods supplied
 
-  check_length_exogenous1 = purrr::map(external$rhs, function(x) eval(parse(text=x)))
-  check_length_exogenous2 = purrr::map_dbl(check_length_exogenous1, length)
+  # check_length_exogenous1 = purrr::map(external$rhs, function(x) eval(parse(text=x)))
+  # check_length_exogenous2 = purrr::map_dbl(check_length_exogenous1, length)
 
   # 7. Check that periods are bigger than one
   if (periods < 2) {
@@ -269,9 +317,9 @@ sfcr_baseline <- function(equations, external, periods, initial = NULL, hidden =
 
   }
 
-  if (mean(check_length_exogenous2) > 1) {
-    rlang::abort("At the baseline construct level, exogenous variables can only be supplied as a constant.")
-    }
+  # if (mean(check_length_exogenous2) > 1) {
+  #   rlang::abort("At the baseline construct level, exogenous variables can only be supplied as a constant.")
+  #  }
 
   s2 <- .prep_equations(s1, external)
 
@@ -309,7 +357,12 @@ sfcr_baseline <- function(equations, external, periods, initial = NULL, hidden =
   s5 <- dplyr::select(s5, -tidyselect::contains("block"))
   s5 <- dplyr::select(s5, .data$period, tidyselect::everything())
 
-  x <- new_sfcr_tbl(tbl = s5, matrix = s4, calls = s2, external = external$lhs)
+  x <- new_sfcr_tbl(tbl = s5, matrix = s4, calls = s2, external = external)
+
+  # Raise message to suggest the utilization of `sfcr_random()` instead of `rnorm()` and related functions
+  if (any(purrr::map_lgl(external$rhs, ~stringr::str_detect(.x, "rnorm\\(|rbinom\\(|runif\\(")))) {
+    rlang::inform("The utilization of `rnorm()` and related functions to add random variation to endogenous variables will be disallowed in the future. Use `sfcr_random()` instead.")
+  }
 
   return(x)
 }

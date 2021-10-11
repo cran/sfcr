@@ -1,6 +1,6 @@
 Package: sfcr
 Title: Simulate Stock-Flow Consistent Models
-Version: 0.2.0
+Version: 0.2.1
 Authors@R: 
     person(given = "Joao",
            family = "Macalos",
@@ -26,8 +26,8 @@ VignetteBuilder: knitr
 RdMacros: Rdpack
 LinkingTo: Rcpp, RcppArmadillo
 NeedsCompilation: yes
-Packaged: 2021-10-05 12:25:26 UTC; JouJo
+Packaged: 2021-10-11 07:46:08 UTC; JouJo
 Author: Joao Macalos [aut, cre] (<https://orcid.org/0000-0001-6050-6394>)
 Maintainer: Joao Macalos <joaomacalos@gmail.com>
 Repository: CRAN
-Date/Publication: 2021-10-05 12:40:02 UTC
+Date/Publication: 2021-10-11 08:00:02 UTC
